@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat with Rita 🌸 (Streaming)</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --primary: #ff6b6b;
+      --secondary: #4ecdc4;
+      --dark: #292f36;
+      --light: #f7fff7;
+      --thinking-bg: #e0f2f1; /* Lighter shade for thinking */
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 800px;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column; /* Ensure container flexes vertically */
+      height: calc(100vh - 40px); /* Make container take most of viewport height */
+      max-height: 90vh; /* Add a max height */
+    }
+
+    h2 {
+      text-align: center;
+      color: var(--dark);
+      margin: 20px 0;
+      font-size: 2rem;
+      background: linear-gradient(to right, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      flex-shrink: 0; /* Prevent header from shrinking */
+    }
+
+    #chatbox {
+      flex-grow: 1; /* Allow chatbox to take available space */
+      padding: 20px;
+      overflow-y: auto;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+      border-top: 1px solid #eee; /* Add top border too */
+    }
+
+    .message {
+      margin-bottom: 15px;
+      padding: 12px 15px;
+      border-radius: 18px;
+      max-width: 85%; /* Slightly wider */
+      line-height: 1.5; /* Improve readability */
+      position: relative;
+      animation: fadeIn 0.3s ease;
+      word-wrap: break-word; /* Handle long words */
+    }
+     /* Markdown rendering styles */
+    .message.bot p { margin: 0.5em 0; }
+    .message.bot ul, .message.bot ol { padding-left: 20px; margin: 0.5em 0; }
+    .message.bot code { background-color: #eee; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+    .message.bot pre code { display: block; padding: 10px; background-color: #eee; border-radius: 5px; overflow-x: auto;}
+
+
+    .user {
+      background: var(--primary);
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 5px;
+    }
+
+    .bot {
+      background: var(--secondary);
+      color: white;
+      margin-right: auto;
+      border-bottom-left-radius: 5px;
+    }
+    .bot.thinking { /* Style for the thinking message */
+       background: var(--thinking-bg);
+       color: var(--dark);
+       font-style: italic;
+    }
+
+    .input-area {
+      display: flex;
+      padding: 15px;
+      background: white;
+      flex-shrink: 0; /* Prevent input area from shrinking */
+    }
+
+    #userInput {
+      flex: 1;
+      padding: 12px 15px;
+      border: 2px solid #eee;
+      border-radius: 25px;
+      font-size: 1rem;
+      outline: none;
+      transition: border 0.3s;
+    }
+
+    #userInput:focus {
+      border-color: var(--secondary);
+    }
+
+    button {
+      background: linear-gradient(to right, var(--primary), var(--secondary));
+      color: white;
+      border: none;
+      border-radius: 25px;
+      padding: 0 25px;
+      margin-left: 10px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: transform 0.2s, box-shadow 0.2s;
+      font-size: 1rem; /* Match input font size */
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+     button:disabled { /* Style for disabled button */
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Scrollbar styling */
+    #chatbox::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #chatbox::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    #chatbox::-webkit-scrollbar-thumb {
+      background: var(--secondary);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>🌸 Chat with Rita</h2>
+  <div id="chatbox">
+    <div class="message bot"><b>Rita:</b> Hi there! How can I help you today?</div>
+  </div>
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Ask Rita anything..." onkeydown="handleKeyDown(event)" />
+    <button id="sendButton" onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<script>
+  const chatbox = document.getElementById("chatbox");
+  const userInput = document.getElementById("userInput");
+  const sendButton = document.getElementById("sendButton");
+
+  // --- Conversation History ---
+  let conversationHistory = [
+    // Add initial system message or bot greeting if desired
+    { role: "assistant", content: "Hi there! How can I help you today?" } // Match initial message
+  ];
+
+  // Function to add a message to the chatbox display
+  function addMessageToChatbox(role, text, elementId = null) {
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("message", role);
+    if (elementId) {
+      messageDiv.id = elementId;
+    }
+
+    // Sanitize text before inserting as HTML (basic example)
+    // For production, use a more robust sanitizer if needed
+    const sanitizedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Use marked to render markdown for bot messages
+    if (role === 'bot' && window.marked) {
+         messageDiv.innerHTML = `<b>${role === 'user' ? 'You' : 'Rita'}:</b> ${marked.parse(text)}`;
+    } else {
+         messageDiv.innerHTML = `<b>${role === 'user' ? 'You' : 'Rita'}:</b> ${sanitizedText}`; // Keep user text plain
+    }
+
+    chatbox.appendChild(messageDiv);
+    chatbox.scrollTop = chatbox.scrollHeight; // Scroll down
+    return messageDiv; // Return the created element
+  }
+
+   // Function to update the last bot message (for streaming)
+   function updateLastBotMessage(chunk, botMessageElement) {
+        // Append the chunk to the existing content
+        // Use marked.parse on the *accumulated* content for correct rendering
+        const currentContent = botMessageElement.userData.rawContent + chunk;
+        botMessageElement.userData.rawContent = currentContent; // Store raw content
+
+        // Render accumulated content as Markdown
+        botMessageElement.innerHTML = `<b>Rita:</b> ${marked.parse(currentContent)}`;
+        chatbox.scrollTop = chatbox.scrollHeight; // Keep scrolled down
+   }
+
+
+  async function sendMessage() {
+    const userText = userInput.value.trim();
+    if (!userText) return;
+
+    // Disable input and button during processing
+    userInput.disabled = true;
+    sendButton.disabled = true;
+
+    // Add user message to chatbox and history
+    addMessageToChatbox("user", userText);
+    conversationHistory.push({ role: "user", content: userText });
+
+    userInput.value = ""; // Clear input field
+
+    // Add a placeholder for the bot's response (for streaming)
+    const botMessageId = `bot-msg-${Date.now()}`;
+    const botMessageElement = addMessageToChatbox("bot", "Thinking...", botMessageId);
+    botMessageElement.classList.add("thinking"); // Add thinking style
+    botMessageElement.userData = { rawContent: "" }; // Store raw text for markdown updates
+
+
+    try {
+      const response = await fetch("http://localhost:8000/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Send the *entire* conversation history
+        body: JSON.stringify({ messages: conversationHistory })
+      });
+
+      if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Failed to parse error response.' }));
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.detail || response.statusText}`);
+      }
+
+      // --- Handle Streaming Response ---
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedResponse = ""; // Accumulate full response for history
+
+      // Remove thinking style and initial text
+      botMessageElement.innerHTML = `<b>Rita:</b> `; // Clear "Thinking..." but keep prefix
+      botMessageElement.classList.remove("thinking");
+
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedResponse += chunk;
+        // Update the bot message element incrementally
+        updateLastBotMessage(chunk, botMessageElement);
+      }
+      // --- End Streaming Handling ---
+
+      // Add the final complete bot response to the history
+      conversationHistory.push({ role: "assistant", content: accumulatedResponse.trim() });
+
+    } catch (error) {
+        console.error("Error fetching or streaming response:", error);
+        const errorText = `Sorry, I encountered an error. ${error.message || ''}`;
+        // Update the bot message placeholder with the error
+        if (botMessageElement) {
+            botMessageElement.innerHTML = `<b>Rita:</b> ${errorText}`;
+            botMessageElement.classList.remove("thinking"); // Ensure thinking style is removed
+             // Add error message to history *if appropriate* for your use case
+            conversationHistory.push({ role: "assistant", content: errorText });
+        } else {
+            addMessageToChatbox("bot", errorText); // Fallback if element wasn't created
+        }
+
+    } finally {
+      // Re-enable input and button
+      userInput.disabled = false;
+      sendButton.disabled = false;
+      userInput.focus(); // Set focus back to input
+      chatbox.scrollTop = chatbox.scrollHeight; // Ensure scrolled to bottom
+    }
+  }
+
+  // Send message on Enter key press
+  function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) { // Allow Shift+Enter for new lines if needed in future
+      event.preventDefault(); // Prevent default Enter behavior (new line)
+      sendMessage();
+    }
+  }
+
+  // Initial focus on input
+  userInput.focus();
+
+</script>
+
+</body>
+</html>
